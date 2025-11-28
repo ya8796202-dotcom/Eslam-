@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>مذكّر أوقات الصلاة - PWA ملف واحد</title>
+<title>مذكّر أوقات الصلاة - PWA قابل للتثبيت</title>
 <style>
   :root{font-family:system-ui,Segoe UI,Roboto,"Noto Sans Arabic",sans-serif}
-  body{max-width:900px;margin:18px auto;padding:16px;line-height:1.6;color:#111;background:#f7f7fb}
+  body{max-width:900px;margin:18px auto;padding:16px;line-height:1.6;color:#111;background:#f4f7fb;direction:rtl}
   header{display:flex;align-items:center;gap:12px}
-  .icon{width:56px;height:56px;border-radius:10px;background:#0b5;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  .icon{width:56px;height:56px;border-radius:10px;background:#0b79d0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
   h1{font-size:1.25rem;margin:0}
   .card{background:#fff;padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.06);margin-top:12px}
   table{width:100%;border-collapse:collapse;margin-top:8px}
@@ -23,14 +23,12 @@
   <div class="icon">ص</div>
   <div>
     <h1>مذكّر أوقات الصلاة</h1>
-    <small>تطبيق ويب قابل للتثبيت — يعمل من ملف واحد</small>
+    <small>تطبيق ويب قابل للتثبيت — ملف واحد</small>
   </div>
 </header>
 
 <div class="card" id="main">
-  <div>
-    <strong>الموقع:</strong> <span id="loc">لم يتم تحديده</span>
-  </div>
+  <div><strong>الموقع:</strong> <span id="loc">لم يتم تحديده</span></div>
   <div class="controls">
     <button id="btn-get-location">تحديد الموقع الآن</button>
     <button id="btn-request-notif">طلب إذن الإشعارات</button>
@@ -40,49 +38,41 @@
   <div id="timesCard" style="margin-top:12px;display:none">
     <h3>أوقات اليوم</h3>
     <table id="timesTable">
-      <thead><tr><th>الصلاة</th><th>الوقت</th><th>تبويب</th></tr></thead>
+      <thead><tr><th>الصلاة</th><th>الوقت</th><th>حالة</th></tr></thead>
       <tbody></tbody>
     </table>
-    <div style="margin-top:8px"><small>الإشعارات ستُعرض عند وقت كل صلاة إذا منحت الإذن وبقيت الصفحة مفتوحة أو بعد تفاعل المستخدم.</small></div>
+    <div style="margin-top:8px"><small>الإشعارات ستُعرض عند وقت كل صلاة إذا منحت الإذن. تشغيل الصوت يعمل عندما تكون الصفحة مفتوحة أو بعد تفاعل المستخدم.</small></div>
   </div>
 </div>
 
 <script>
-/* ---------------------------
-  أيقونة مضمّنة (SVG data URL) للـ manifest
-----------------------------*/
-const iconDataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 24 24" fill="none">
-    <rect width="24" height="24" rx="4" fill="#0b79d0"/>
-    <text x="12" y="15" font-size="10" text-anchor="middle" fill="#fff" font-family="Noto Sans Arabic, sans-serif">صلاة</text>
-  </svg>`
-);
+/* ============================
+   إعداد manifest كـ data URL (مضمّن)
+   ============================ */
+const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 24 24" fill="none">
+  <rect width="24" height="24" rx="4" fill="#0b79d0"/>
+  <text x="12" y="15" font-size="10" text-anchor="middle" fill="#fff" font-family="Noto Sans Arabic, sans-serif">صلاة</text>
+</svg>`;
+const iconDataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg);
 
-/* ---------------------------
-  Manifest كـ Blob وربطه ديناميكياً
-----------------------------*/
-const manifest = {
+const manifestObj = {
   name: "مذكّر أوقات الصلاة",
   short_name: "مذكّر الصلاة",
   start_url: ".",
   display: "standalone",
   background_color: "#ffffff",
   theme_color: "#0b79d0",
-  icons: [
-    { src: iconDataUrl, sizes: "192x192", type: "image/svg+xml" }
-  ]
+  icons: [{ src: iconDataUrl, sizes: "192x192", type: "image/svg+xml" }]
 };
-const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-const manifestURL = URL.createObjectURL(manifestBlob);
+const manifestDataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifestObj));
 const link = document.createElement('link');
 link.rel = 'manifest';
-link.href = manifestURL;
+link.href = manifestDataUrl;
 document.head.appendChild(link);
 
-/* ---------------------------
-  Service Worker كـ Blob (مبسط)
-  - يستقبل رسائل من الصفحة لعرض إشعار
-----------------------------*/
+/* ============================
+   Service Worker كـ Blob مع نطاق '/'
+   ============================ */
 const swCode = `
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => { self.clients.claim(); });
@@ -90,7 +80,7 @@ self.addEventListener('activate', e => { self.clients.claim(); });
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   event.waitUntil(
-    clients.matchAll({type:'window'}).then(windowClients => {
+    clients.matchAll({type:'window', includeUncontrolled:true}).then(windowClients => {
       for (let client of windowClients) {
         if (client.url && 'focus' in client) return client.focus();
       }
@@ -113,102 +103,78 @@ self.addEventListener('message', function(e) {
   }
 });
 `;
+
+// Blob وURL ثم تسجيل الـ SW بنطاق الجذر
 const swBlob = new Blob([swCode], {type: 'application/javascript'});
 const swUrl = URL.createObjectURL(swBlob);
 
-/* ---------------------------
-  تسجيل Service Worker
-----------------------------*/
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register(swUrl).then(reg => {
-    console.log('SW registered', reg);
-  }).catch(err => console.warn('SW reg failed', err));
+  navigator.serviceWorker.register(swUrl, {scope: './'}).then(reg => {
+    console.log('Service Worker registered with scope', reg.scope);
+  }).catch(err => console.warn('SW registration failed', err));
 }
 
-/* ---------------------------
-  مكتبة حساب أوقات الصلاة (PrayTimes مبسطة)
-  هذه نسخة مختصرة ومناسبة لمعظم الاستخدامات.
-  المصدر الأصلي لفكرة الحساب: algorithms of prayer times (sun position)
-----------------------------*/
+/* ============================
+   مكتبة مبسطة لحساب أوقات الصلاة
+   (نسخة مبسطة مناسبة للتجربة)
+   ============================ */
 const PrayTimes = (function(){
-  // إعدادات افتراضية (طريقة الحساب: MuslimWorldLeague)
-  const method = {
-    name: 'MWL',
-    fajrAngle: 18,
-    ishaAngle: 17
-  };
-
-  function toRad(d){ return d * Math.PI/180; }
-  function toDeg(r){ return r * 180/Math.PI; }
-
-  function sunPosition(jd) {
+  const method = {fajrAngle:18, ishaAngle:17};
+  function toRad(d){ return d*Math.PI/180; }
+  function toDeg(r){ return r*180/Math.PI; }
+  function julianDate(y,m,d){
+    if (m<=2){ y-=1; m+=12; }
+    const A = Math.floor(y/100), B = 2 - A + Math.floor(A/4);
+    return Math.floor(365.25*(y+4716)) + Math.floor(30.6001*(m+1)) + d + B - 1524.5;
+  }
+  function sunPos(jd){
     const D = jd - 2451545.0;
     const g = 357.529 + 0.98560028 * D;
     const q = 280.459 + 0.98564736 * D;
-    const L = q + 1.915 * Math.sin(toRad(g)) + 0.020 * Math.sin(toRad(2*g));
+    const L = q + 1.915*Math.sin(toRad(g)) + 0.020*Math.sin(toRad(2*g));
     const e = 23.439 - 0.00000036 * D;
-    const RA = toDeg(Math.atan2(Math.cos(toRad(e)) * Math.sin(toRad(L)), Math.cos(toRad(L))))/15;
-    const decl = toDeg(Math.asin(Math.sin(toRad(e)) * Math.sin(toRad(L))));
+    const decl = toDeg(Math.asin(Math.sin(toRad(e))*Math.sin(toRad(L))));
+    const RA = toDeg(Math.atan2(Math.cos(toRad(e))*Math.sin(toRad(L)), Math.cos(toRad(L))))/15;
     const eqt = q/15 - RA;
-    return {decl: decl, eqt: eqt};
+    return {decl, eqt};
   }
-
-  function julianDate(year, month, day) {
-    if (month <= 2) { year -= 1; month += 12; }
-    const A = Math.floor(year/100);
-    const B = 2 - A + Math.floor(A/4);
-    const jd = Math.floor(365.25*(year+4716)) + Math.floor(30.6001*(month+1)) + day + B - 1524.5;
-    return jd;
+  function midDay(jd, lon){
+    const sp = sunPos(jd);
+    return (12 - sp.eqt) - (lon/15);
   }
-
-  function midDay(time, jd, lon) {
-    const sp = sunPosition(jd + time);
-    const Z = (12 - sp.eqt) - (lon/15);
-    return Z;
-  }
-
-  function sunAngleTime(angle, time, jd, lat, lon, direction) {
-    const sp = sunPosition(jd + time);
+  function sunAngleTime(jd, angle, lat, lon, ccw){
+    const sp = sunPos(jd);
     const decl = sp.decl;
-    const noon = midDay(time, jd, lon);
+    const noon = midDay(jd, lon);
     const t = (1/15) * toDeg(Math.acos((Math.sin(toRad(angle)) - Math.sin(toRad(lat))*Math.sin(toRad(decl))) / (Math.cos(toRad(lat))*Math.cos(toRad(decl)))));
-    return direction === 'ccw' ? noon - t : noon + t;
+    return ccw ? noon - t : noon + t;
   }
-
-  function computeTimes(date, coords) {
-    const year = date.getFullYear(), month = date.getMonth()+1, day = date.getDate();
-    const jd = julianDate(year, month, day);
+  function compute(date, coords){
+    const y=date.getFullYear(), m=date.getMonth()+1, d=date.getDate();
+    const jd = julianDate(y,m,d);
     const lat = coords.latitude, lon = coords.longitude;
-    // تقريب أولي: نحسب أوقات الفجر والشروق والظهر والعصر والمغرب والعشاء
-    const dhuhr = midDay(0, jd, lon);
-    const fajr = sunAngleTime(-method.fajrAngle, 0, jd, lat, lon, 'ccw');
-    const sunrise = sunAngleTime(-0.833, 0, jd, lat, lon, 'ccw');
+    const dhuhr = midDay(jd, lon);
+    const fajr = sunAngleTime(jd, -method.fajrAngle, lat, lon, true);
+    const sunrise = sunAngleTime(jd, -0.833, lat, lon, true);
     const asr = (function(){
-      // حساب ظل الظل (تقريب) للظهر + زاوية
-      const sp = sunPosition(jd);
+      // تقريب للعصر (مبسط)
+      const sp = sunPos(jd);
       const decl = sp.decl;
       const angle = -toDeg(Math.atan(1 + Math.tan(Math.abs(toRad(lat - decl)))));
-      return sunAngleTime(angle, 0, jd, lat, lon, 'cw');
+      return sunAngleTime(jd, angle, lat, lon, false);
     })();
-    const maghrib = sunAngleTime(-0.833, 0, jd, lat, lon, 'cw');
-    const isha = sunAngleTime(-method.ishaAngle, 0, jd, lat, lon, 'cw');
-
-    return {
-      fajr: fajr, sunrise: sunrise, dhuhr: dhuhr, asr: asr, maghrib: maghrib, isha: isha
-    };
+    const maghrib = sunAngleTime(jd, -0.833, lat, lon, false);
+    const isha = sunAngleTime(jd, -method.ishaAngle, lat, lon, false);
+    return {fajr, sunrise, dhuhr, asr, maghrib, isha};
   }
-
-  function floatToTime(timeFloat) {
-    // timeFloat in hours (e.g., 5.5 => 05:30)
-    timeFloat = (timeFloat + 24) % 24;
-    const h = Math.floor(timeFloat);
-    const m = Math.floor((timeFloat - h) * 60 + 0.5);
+  function floatToTime(t){
+    t = (t + 24) % 24;
+    const h = Math.floor(t), m = Math.floor((t - h)*60 + 0.5);
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
   }
-
   return {
-    getTimes: function(date, coords) {
-      const t = computeTimes(date, coords);
+    getTimes: function(date, coords){
+      const t = compute(date, coords);
       return {
         fajr: floatToTime(t.fajr),
         sunrise: floatToTime(t.sunrise),
@@ -221,38 +187,33 @@ const PrayTimes = (function(){
   };
 })();
 
-/* ---------------------------
-  واجهة المستخدم ووظائف التطبيق
-----------------------------*/
+/* ============================
+   واجهة المستخدم والجدولة
+   ============================ */
 const btnLoc = document.getElementById('btn-get-location');
 const btnNotif = document.getElementById('btn-request-notif');
 const locSpan = document.getElementById('loc');
 const timesCard = document.getElementById('timesCard');
 const timesTableBody = document.querySelector('#timesTable tbody');
 let currentCoords = null;
-let scheduledTimers = [];
+let scheduled = {}; // key -> timeout id
 
-// طلب إذن الإشعارات
 btnNotif.addEventListener('click', async () => {
-  if (!('Notification' in window)) return alert('الإشعارات غير مدعومة في هذا المتصفح');
-  const perm = await Notification.requestPermission();
-  alert('حالة إذن الإشعارات: ' + perm);
+  if (!('Notification' in window)) return alert('الإشعارات غير مدعومة هنا');
+  const p = await Notification.requestPermission();
+  alert('حالة إذن الإشعارات: ' + p);
 });
 
-// الحصول على الموقع
 btnLoc.addEventListener('click', () => {
   if (!navigator.geolocation) return alert('الموقع غير مدعوم');
   navigator.geolocation.getCurrentPosition(pos => {
     currentCoords = pos.coords;
-    locSpan.textContent = \`\${currentCoords.latitude.toFixed(4)}, \${currentCoords.longitude.toFixed(4)}\`;
-    updateTimesAndSchedule();
-  }, err => {
-    alert('خطأ في الحصول على الموقع: ' + err.message);
-  }, {enableHighAccuracy:true, maximumAge:600000});
+    locSpan.textContent = `${currentCoords.latitude.toFixed(4)}, ${currentCoords.longitude.toFixed(4)}`;
+    renderTimesAndSchedule();
+  }, err => alert('خطأ في الحصول على الموقع: ' + err.message), {enableHighAccuracy:true});
 });
 
-// حساب الأوقات وعرضها
-function updateTimesAndSchedule() {
+function renderTimesAndSchedule() {
   if (!currentCoords) return;
   const now = new Date();
   const times = PrayTimes.getTimes(now, currentCoords);
@@ -260,125 +221,95 @@ function updateTimesAndSchedule() {
   timesTableBody.innerHTML = '';
   const order = ['fajr','sunrise','dhuhr','asr','maghrib','isha'];
   const names = {fajr:'الفجر',sunrise:'الشروق',dhuhr:'الظهر',asr:'العصر',maghrib:'المغرب',isha:'العشاء'};
-  order.forEach(key => {
+  order.forEach(k => {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td>' + names[key] + '</td><td>' + times[key] + '</td><td><button data-key="'+key+'">تفعيل إشعار</button></td>';
+    tr.innerHTML = `<td>${names[k]}</td><td>${times[k]}</td><td><button data-key="${k}">تفعيل إشعار</button></td>`;
     timesTableBody.appendChild(tr);
   });
-
-  // أزرار تفعيل إشعار لكل صلاة
-  timesTableBody.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const key = btn.getAttribute('data-key');
-      scheduleNotificationForKey(key, times[key], names[key]);
-      btn.textContent = 'مجدول';
-      btn.disabled = true;
+  timesTableBody.querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      const key = b.getAttribute('data-key');
+      scheduleForKey(key, times[key], names[key]);
+      b.textContent = 'مجدول'; b.disabled = true;
     });
   });
-
-  // جدولة تلقائية للأوقات القادمة (إذا رغبت)
+  // جدولة تلقائية للأوقات المتبقية اليوم
   scheduleAllUpcoming(times, names);
 }
 
-/* تحويل وقت HH:MM إلى تاريخ */
-function timeStringToDate(today, hhmm) {
+function timeToDate(today, hhmm) {
   const [hh, mm] = hhmm.split(':').map(Number);
-  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hh, mm, 0, 0);
-  return d;
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate(), hh, mm, 0, 0);
 }
 
-/* جدولة إشعار لصلاة محددة */
-async function scheduleNotificationForKey(key, hhmm, displayName) {
-  // إلغاء أي مؤقت سابق لنفس المفتاح
-  scheduledTimers = scheduledTimers.filter(t => {
-    if (t.key === key) { clearTimeout(t.timer); return false; }
-    return true;
-  });
-
+function scheduleForKey(key, hhmm, displayName) {
+  // إلغاء سابق
+  if (scheduled[key]) { clearTimeout(scheduled[key]); delete scheduled[key]; }
   const now = new Date();
-  const target = timeStringToDate(now, hhmm);
-  if (target.getTime() < now.getTime()) {
-    // إذا الوقت مضى، لا نجدول أو نجده للغد
-    target.setDate(target.getDate() + 1);
-  }
+  let target = timeToDate(now, hhmm);
+  if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
   const delay = target.getTime() - now.getTime();
-  const timer = setTimeout(() => {
-    showPrayerNotification(displayName, key);
+  scheduled[key] = setTimeout(() => {
+    notifyPrayer(displayName, key);
+    delete scheduled[key];
   }, delay);
-  scheduledTimers.push({key, timer, when: target});
-  console.log('Scheduled', key, target);
   alert('تم جدولة إشعار ' + displayName + ' عند ' + target.toLocaleString());
 }
 
-/* جدولة تلقائية لكل الأوقات القادمة لليوم */
 function scheduleAllUpcoming(times, names) {
-  Object.keys(times).forEach(key => {
-    // نفعّل تلقائيًا إشعارات للأوقات التي لم تمضِ بعد
-    const now = new Date();
-    const tDate = timeStringToDate(now, times[key]);
+  const now = new Date();
+  Object.keys(times).forEach(k => {
+    const tDate = timeToDate(now, times[k]);
     if (tDate.getTime() > now.getTime()) {
-      // لا نعيد جدولة إذا سبق وأن جدولت يدوياً (مبسط)
-      scheduleNotificationForKey(key, times[key], names[key]);
+      // إذا لم يكن مجدول مسبقًا
+      if (!scheduled[k]) scheduleForKey(k, times[k], names[k]);
     }
   });
 }
 
-/* إرسال رسالة إلى Service Worker لعرض إشعار */
-async function showPrayerNotification(title, tag) {
+function notifyPrayer(title, tag) {
   const body = 'حان وقت ' + title;
-  // إرسال رسالة إلى SW لعرض الإشعار
+  // إرسال رسالة للـ Service Worker لعرض الإشعار (أفضل)
   if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
-      type: 'show-notification',
-      title: title,
-      body: body,
-      tag: tag
-    });
+    navigator.serviceWorker.controller.postMessage({type:'show-notification', title, body, tag});
   } else if (Notification && Notification.permission === 'granted') {
-    new Notification(title, { body });
+    new Notification(title, {body});
   }
-  // تشغيل صوت إن كانت الصفحة مرئية أو بعد تفاعل
-  playAdhanTone();
+  // تشغيل نغمة بسيطة إذا كانت الصفحة مرئية
+  if (document.visibilityState === 'visible') playTone();
 }
 
-/* تشغيل نغمة بسيطة عبر WebAudio */
-function playAdhanTone() {
+/* نغمة بسيطة عبر WebAudio */
+function playTone() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = 'sine';
     o.frequency.value = 440;
-    o.connect(g);
-    g.connect(ctx.destination);
+    o.connect(g); g.connect(ctx.destination);
     g.gain.value = 0.0001;
-    // تدرج الصوت لتجاوز قيود autoplay بعد تفاعل المستخدم
     g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.05);
     o.start();
     setTimeout(() => {
       g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
       setTimeout(()=>{ o.stop(); ctx.close(); }, 600);
     }, 1200);
-  } catch (e) {
-    console.warn('Audio play failed', e);
-  }
+  } catch(e){ console.warn('Audio failed', e); }
 }
 
-/* عند تحميل الصفحة: حاول الحصول على الموقع تلقائيًا (اختياري) */
+/* محاولة الحصول على الموقع تلقائيًا عند التحميل (اختياري) */
 window.addEventListener('load', () => {
-  // محاولة تلقائية لكن لا تجبر المستخدم
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos => {
       currentCoords = pos.coords;
-      locSpan.textContent = \`\${currentCoords.latitude.toFixed(4)}, \${currentCoords.longitude.toFixed(4)}\`;
-      updateTimesAndSchedule();
-    }, err => {
-      console.log('geo auto failed', err);
-    }, {maximumAge:600000});
+      locSpan.textContent = `${currentCoords.latitude.toFixed(4)}, ${currentCoords.longitude.toFixed(4)}`;
+      renderTimesAndSchedule();
+    }, err => console.log('geo auto failed', err), {maximumAge:600000});
   }
 });
 
-/* دعم تثبيت PWA (عرض زر التثبيت) */
+/* دعم زر التثبيت PWA */
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
