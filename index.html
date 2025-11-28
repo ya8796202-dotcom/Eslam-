@@ -1,329 +1,81 @@
+// ===== إعدادات السيرفر =====
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// مجلد المواقع
+const SITES_DIR = path.join(__dirname, 'sites');
+if (!fs.existsSync(SITES_DIR)) fs.mkdirSync(SITES_DIR, { recursive: true });
+
+// إعداد رفع الملفات
+const upload = multer({ dest: 'uploads/' });
+
+// ===== API رفع المواقع =====
+app.post('/upload', upload.array('files'), (req, res) => {
+  const siteName = (req.body.siteName || '').trim().toLowerCase().replace(/\s+/g, '-');
+  if (!siteName) return res.status(400).send('اسم الموقع مطلوب');
+
+  const sitePath = path.join(SITES_DIR, siteName);
+  if (!fs.existsSync(sitePath)) fs.mkdirSync(sitePath, { recursive: true });
+
+  req.files.forEach(file => {
+    const dest = path.join(sitePath, file.originalname);
+    fs.renameSync(file.path, dest);
+  });
+
+  const url = `/sites/${siteName}/index.html`;
+  res.send(`تم النشر! افتح: ${url}`);
+});
+
+// ===== خدمة المواقع المنشورة =====
+app.use('/sites', express.static(SITES_DIR));
+
+// ===== واجهة المستخدم (HTML) =====
+app.get('/', (req, res) => {
+  res.send(`
 <!doctype html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>مذكّر أوقات الصلاة - PWA قابل للتثبيت</title>
-<style>
-  :root{font-family:system-ui,Segoe UI,Roboto,"Noto Sans Arabic",sans-serif}
-  body{max-width:900px;margin:18px auto;padding:16px;line-height:1.6;color:#111;background:#f4f7fb;direction:rtl}
-  header{display:flex;align-items:center;gap:12px}
-  .icon{width:56px;height:56px;border-radius:10px;background:#0b79d0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
-  h1{font-size:1.25rem;margin:0}
-  .card{background:#fff;padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.06);margin-top:12px}
-  table{width:100%;border-collapse:collapse;margin-top:8px}
-  td,th{padding:8px;text-align:right;border-bottom:1px solid #eee}
-  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-  button{padding:8px 12px;border-radius:8px;border:0;background:#0b79d0;color:#fff;cursor:pointer}
-  small{color:#666}
-</style>
+  <meta charset="utf-8" />
+  <title>منصة نشر مواقع</title>
+  <style>
+    body { font-family: sans-serif; background:#0f172a; color:#e2e8f0; padding:40px; }
+    .box { max-width:600px; margin:auto; background:#111827; padding:20px; border-radius:10px; }
+    input,button { width:100%; margin:10px 0; padding:10px; border-radius:8px; border:none; }
+    input { background:#0b1220; color:#e2e8f0; }
+    button { background:#2563eb; color:white; cursor:pointer; }
+    .result { margin-top:15px; }
+  </style>
 </head>
 <body>
-<header>
-  <div class="icon">ص</div>
-  <div>
-    <h1>مذكّر أوقات الصلاة</h1>
-    <small>تطبيق ويب قابل للتثبيت — ملف واحد</small>
+  <div class="box">
+    <h1>منصة نشر مواقع</h1>
+    <form id="form">
+      <input type="text" name="siteName" placeholder="اسم الموقع" required />
+      <input type="file" name="files" multiple required />
+      <button type="submit">نشر الموقع</button>
+    </form>
+    <div class="result" id="result"></div>
   </div>
-</header>
-
-<div class="card" id="main">
-  <div><strong>الموقع:</strong> <span id="loc">لم يتم تحديده</span></div>
-  <div class="controls">
-    <button id="btn-get-location">تحديد الموقع الآن</button>
-    <button id="btn-request-notif">طلب إذن الإشعارات</button>
-    <button id="btn-install" style="display:none">تثبيت التطبيق</button>
-  </div>
-
-  <div id="timesCard" style="margin-top:12px;display:none">
-    <h3>أوقات اليوم</h3>
-    <table id="timesTable">
-      <thead><tr><th>الصلاة</th><th>الوقت</th><th>حالة</th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <div style="margin-top:8px"><small>الإشعارات ستُعرض عند وقت كل صلاة إذا منحت الإذن. تشغيل الصوت يعمل عندما تكون الصفحة مفتوحة أو بعد تفاعل المستخدم.</small></div>
-  </div>
-</div>
-
 <script>
-/* ============================
-   إعداد manifest كـ data URL (مضمّن)
-   ============================ */
-const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 24 24" fill="none">
-  <rect width="24" height="24" rx="4" fill="#0b79d0"/>
-  <text x="12" y="15" font-size="10" text-anchor="middle" fill="#fff" font-family="Noto Sans Arabic, sans-serif">صلاة</text>
-</svg>`;
-const iconDataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(iconSvg);
-
-const manifestObj = {
-  name: "مذكّر أوقات الصلاة",
-  short_name: "مذكّر الصلاة",
-  start_url: ".",
-  display: "standalone",
-  background_color: "#ffffff",
-  theme_color: "#0b79d0",
-  icons: [{ src: iconDataUrl, sizes: "192x192", type: "image/svg+xml" }]
-};
-const manifestDataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifestObj));
-const link = document.createElement('link');
-link.rel = 'manifest';
-link.href = manifestDataUrl;
-document.head.appendChild(link);
-
-/* ============================
-   Service Worker كـ Blob مع نطاق '/'
-   ============================ */
-const swCode = `
-self.addEventListener('install', e => { self.skipWaiting(); });
-self.addEventListener('activate', e => { self.clients.claim(); });
-
-self.addEventListener('notificationclick', function(event) {
-  event.notification.close();
-  event.waitUntil(
-    clients.matchAll({type:'window', includeUncontrolled:true}).then(windowClients => {
-      for (let client of windowClients) {
-        if (client.url && 'focus' in client) return client.focus();
-      }
-      if (clients.openWindow) return clients.openWindow('/');
-    })
-  );
-});
-
-self.addEventListener('message', function(e) {
-  const data = e.data || {};
-  if (data && data.type === 'show-notification') {
-    const title = data.title || 'أذان';
-    const options = {
-      body: data.body || '',
-      tag: data.tag || ('prayer-' + Date.now()),
-      renotify: true,
-      data: data.data || {}
-    };
-    self.registration.showNotification(title, options);
-  }
-});
-`;
-
-// Blob وURL ثم تسجيل الـ SW بنطاق الجذر
-const swBlob = new Blob([swCode], {type: 'application/javascript'});
-const swUrl = URL.createObjectURL(swBlob);
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register(swUrl, {scope: './'}).then(reg => {
-    console.log('Service Worker registered with scope', reg.scope);
-  }).catch(err => console.warn('SW registration failed', err));
-}
-
-/* ============================
-   مكتبة مبسطة لحساب أوقات الصلاة
-   (نسخة مبسطة مناسبة للتجربة)
-   ============================ */
-const PrayTimes = (function(){
-  const method = {fajrAngle:18, ishaAngle:17};
-  function toRad(d){ return d*Math.PI/180; }
-  function toDeg(r){ return r*180/Math.PI; }
-  function julianDate(y,m,d){
-    if (m<=2){ y-=1; m+=12; }
-    const A = Math.floor(y/100), B = 2 - A + Math.floor(A/4);
-    return Math.floor(365.25*(y+4716)) + Math.floor(30.6001*(m+1)) + d + B - 1524.5;
-  }
-  function sunPos(jd){
-    const D = jd - 2451545.0;
-    const g = 357.529 + 0.98560028 * D;
-    const q = 280.459 + 0.98564736 * D;
-    const L = q + 1.915*Math.sin(toRad(g)) + 0.020*Math.sin(toRad(2*g));
-    const e = 23.439 - 0.00000036 * D;
-    const decl = toDeg(Math.asin(Math.sin(toRad(e))*Math.sin(toRad(L))));
-    const RA = toDeg(Math.atan2(Math.cos(toRad(e))*Math.sin(toRad(L)), Math.cos(toRad(L))))/15;
-    const eqt = q/15 - RA;
-    return {decl, eqt};
-  }
-  function midDay(jd, lon){
-    const sp = sunPos(jd);
-    return (12 - sp.eqt) - (lon/15);
-  }
-  function sunAngleTime(jd, angle, lat, lon, ccw){
-    const sp = sunPos(jd);
-    const decl = sp.decl;
-    const noon = midDay(jd, lon);
-    const t = (1/15) * toDeg(Math.acos((Math.sin(toRad(angle)) - Math.sin(toRad(lat))*Math.sin(toRad(decl))) / (Math.cos(toRad(lat))*Math.cos(toRad(decl)))));
-    return ccw ? noon - t : noon + t;
-  }
-  function compute(date, coords){
-    const y=date.getFullYear(), m=date.getMonth()+1, d=date.getDate();
-    const jd = julianDate(y,m,d);
-    const lat = coords.latitude, lon = coords.longitude;
-    const dhuhr = midDay(jd, lon);
-    const fajr = sunAngleTime(jd, -method.fajrAngle, lat, lon, true);
-    const sunrise = sunAngleTime(jd, -0.833, lat, lon, true);
-    const asr = (function(){
-      // تقريب للعصر (مبسط)
-      const sp = sunPos(jd);
-      const decl = sp.decl;
-      const angle = -toDeg(Math.atan(1 + Math.tan(Math.abs(toRad(lat - decl)))));
-      return sunAngleTime(jd, angle, lat, lon, false);
-    })();
-    const maghrib = sunAngleTime(jd, -0.833, lat, lon, false);
-    const isha = sunAngleTime(jd, -method.ishaAngle, lat, lon, false);
-    return {fajr, sunrise, dhuhr, asr, maghrib, isha};
-  }
-  function floatToTime(t){
-    t = (t + 24) % 24;
-    const h = Math.floor(t), m = Math.floor((t - h)*60 + 0.5);
-    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-  }
-  return {
-    getTimes: function(date, coords){
-      const t = compute(date, coords);
-      return {
-        fajr: floatToTime(t.fajr),
-        sunrise: floatToTime(t.sunrise),
-        dhuhr: floatToTime(t.dhuhr),
-        asr: floatToTime(t.asr),
-        maghrib: floatToTime(t.maghrib),
-        isha: floatToTime(t.isha)
-      };
-    }
-  };
-})();
-
-/* ============================
-   واجهة المستخدم والجدولة
-   ============================ */
-const btnLoc = document.getElementById('btn-get-location');
-const btnNotif = document.getElementById('btn-request-notif');
-const locSpan = document.getElementById('loc');
-const timesCard = document.getElementById('timesCard');
-const timesTableBody = document.querySelector('#timesTable tbody');
-let currentCoords = null;
-let scheduled = {}; // key -> timeout id
-
-btnNotif.addEventListener('click', async () => {
-  if (!('Notification' in window)) return alert('الإشعارات غير مدعومة هنا');
-  const p = await Notification.requestPermission();
-  alert('حالة إذن الإشعارات: ' + p);
-});
-
-btnLoc.addEventListener('click', () => {
-  if (!navigator.geolocation) return alert('الموقع غير مدعوم');
-  navigator.geolocation.getCurrentPosition(pos => {
-    currentCoords = pos.coords;
-    locSpan.textContent = `${currentCoords.latitude.toFixed(4)}, ${currentCoords.longitude.toFixed(4)}`;
-    renderTimesAndSchedule();
-  }, err => alert('خطأ في الحصول على الموقع: ' + err.message), {enableHighAccuracy:true});
-});
-
-function renderTimesAndSchedule() {
-  if (!currentCoords) return;
-  const now = new Date();
-  const times = PrayTimes.getTimes(now, currentCoords);
-  timesCard.style.display = 'block';
-  timesTableBody.innerHTML = '';
-  const order = ['fajr','sunrise','dhuhr','asr','maghrib','isha'];
-  const names = {fajr:'الفجر',sunrise:'الشروق',dhuhr:'الظهر',asr:'العصر',maghrib:'المغرب',isha:'العشاء'};
-  order.forEach(k => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${names[k]}</td><td>${times[k]}</td><td><button data-key="${k}">تفعيل إشعار</button></td>`;
-    timesTableBody.appendChild(tr);
-  });
-  timesTableBody.querySelectorAll('button').forEach(b => {
-    b.addEventListener('click', () => {
-      const key = b.getAttribute('data-key');
-      scheduleForKey(key, times[key], names[key]);
-      b.textContent = 'مجدول'; b.disabled = true;
-    });
-  });
-  // جدولة تلقائية للأوقات المتبقية اليوم
-  scheduleAllUpcoming(times, names);
-}
-
-function timeToDate(today, hhmm) {
-  const [hh, mm] = hhmm.split(':').map(Number);
-  return new Date(today.getFullYear(), today.getMonth(), today.getDate(), hh, mm, 0, 0);
-}
-
-function scheduleForKey(key, hhmm, displayName) {
-  // إلغاء سابق
-  if (scheduled[key]) { clearTimeout(scheduled[key]); delete scheduled[key]; }
-  const now = new Date();
-  let target = timeToDate(now, hhmm);
-  if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
-  const delay = target.getTime() - now.getTime();
-  scheduled[key] = setTimeout(() => {
-    notifyPrayer(displayName, key);
-    delete scheduled[key];
-  }, delay);
-  alert('تم جدولة إشعار ' + displayName + ' عند ' + target.toLocaleString());
-}
-
-function scheduleAllUpcoming(times, names) {
-  const now = new Date();
-  Object.keys(times).forEach(k => {
-    const tDate = timeToDate(now, times[k]);
-    if (tDate.getTime() > now.getTime()) {
-      // إذا لم يكن مجدول مسبقًا
-      if (!scheduled[k]) scheduleForKey(k, times[k], names[k]);
-    }
-  });
-}
-
-function notifyPrayer(title, tag) {
-  const body = 'حان وقت ' + title;
-  // إرسال رسالة للـ Service Worker لعرض الإشعار (أفضل)
-  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({type:'show-notification', title, body, tag});
-  } else if (Notification && Notification.permission === 'granted') {
-    new Notification(title, {body});
-  }
-  // تشغيل نغمة بسيطة إذا كانت الصفحة مرئية
-  if (document.visibilityState === 'visible') playTone();
-}
-
-/* نغمة بسيطة عبر WebAudio */
-function playTone() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.value = 440;
-    o.connect(g); g.connect(ctx.destination);
-    g.gain.value = 0.0001;
-    g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.05);
-    o.start();
-    setTimeout(() => {
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-      setTimeout(()=>{ o.stop(); ctx.close(); }, 600);
-    }, 1200);
-  } catch(e){ console.warn('Audio failed', e); }
-}
-
-/* محاولة الحصول على الموقع تلقائيًا عند التحميل (اختياري) */
-window.addEventListener('load', () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(pos => {
-      currentCoords = pos.coords;
-      locSpan.textContent = `${currentCoords.latitude.toFixed(4)}, ${currentCoords.longitude.toFixed(4)}`;
-      renderTimesAndSchedule();
-    }, err => console.log('geo auto failed', err), {maximumAge:600000});
-  }
-});
-
-/* دعم زر التثبيت PWA */
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', (e) => {
+document.getElementById('form').addEventListener('submit', async e => {
   e.preventDefault();
-  deferredPrompt = e;
-  const btn = document.getElementById('btn-install');
-  btn.style.display = 'inline-block';
-  btn.addEventListener('click', async () => {
-    btn.style.display = 'none';
-    deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice;
-    console.log('Install choice', choice);
-    deferredPrompt = null;
-  });
+  const formData = new FormData(e.target);
+  const res = await fetch('/upload', { method:'POST', body:formData });
+  const text = await res.text();
+  document.getElementById('result').innerHTML = '<p>'+text+'</p>';
 });
 </script>
 </body>
 </html>
+  `);
+});
+
+// ===== تشغيل السيرفر =====
+app.listen(PORT, () => {
+  console.log('Server running at http://localhost:' + PORT);
+});
