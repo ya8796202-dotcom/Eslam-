@@ -27,8 +27,14 @@ app.post('/upload', upload.array('files'), (req, res) => {
     fs.renameSync(file.path, dest);
   });
 
+  // تحقق من وجود index.html
+  const indexPath = path.join(sitePath, 'index.html');
+  if (!fs.existsSync(indexPath)) {
+    return res.status(400).send('لازم ترفع ملف index.html علشان الموقع يشتغل');
+  }
+
   const url = `/sites/${siteName}/index.html`;
-  res.send(`تم النشر! افتح: ${url}`);
+  res.send(`تم النشر! افتح: <a href="${url}" target="_blank">${url}</a>`);
 });
 
 // ===== خدمة المواقع المنشورة =====
